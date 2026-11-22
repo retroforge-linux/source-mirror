@@ -1,0 +1,44 @@
+# Fills this mirror from retroforge-linux/os-build's mirror/sources.lock. Every object the lock
+# names that no shard-* release holds yet is downloaded, checked (a file against its sha256, a git
+# bundle by cloning it and finding its commit) and uploaded. The script is os-build's own
+# tools/source-mirror/sync.sh; see tools/source-mirror/README.md there.
+name: sync
+
+on:
+  schedule:
+    - cron: '23 5 * * *'
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: os-build ref whose mirror/sources.lock to mirror
+        default: main
+
+permissions:
+  contents: write
+
+concurrency:
+  group: sync
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 350
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          repository: retroforge-linux/os-build
+          ref: ${{ inputs.ref || 'main' }}
+          path: os-build
+          sparse-checkout: |
+            tools/source-mirror
+            mirror
+      - name: sync
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if [ ! -f os-build/mirror/sources.lock ]; then
+            echo "os-build ${{ inputs.ref || 'main' }} has no mirror/sources.lock yet: nothing to mirror"
+            exit 0
+          fi
+          bash os-build/tools/source-mirror/sync.sh --repo "$GITHUB_REPOSITORY" os-build/mirror/sources.lock
